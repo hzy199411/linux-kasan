@@ -177,9 +177,6 @@ int __pci_read_base(struct pci_dev *dev, enum pci_bar_type type,
 	struct pci_bus_region region, inverted_region;
 	bool bar_too_big = false, bar_too_high = false, bar_invalid = false;
 
-	if (dev->non_compliant_bars)
-		return 0;
-
 	mask = type ? PCI_ROM_ADDRESS_MASK : ~0;
 
 	/* No printks while decoding is disabled! */
@@ -330,6 +327,9 @@ out:
 static void pci_read_bases(struct pci_dev *dev, unsigned int howmany, int rom)
 {
 	unsigned int pos, reg;
+
+	if (dev->non_compliant_bars)
+		return;
 
 	for (pos = 0; pos < howmany; pos++) {
 		struct resource *res = &dev->resource[pos];
@@ -1329,8 +1329,16 @@ static void program_hpp_type0(struct pci_dev *dev, struct hpp_type0 *hpp)
 
 static void program_hpp_type1(struct pci_dev *dev, struct hpp_type1 *hpp)
 {
-	if (hpp)
-		dev_warn(&dev->dev, "PCI-X settings not supported\n");
+	int pos;
+
+	if (!hpp)
+		return;
+
+	pos = pci_find_capability(dev, PCI_CAP_ID_PCIX);
+	if (!pos)
+		return;
+
+	dev_warn(&dev->dev, "PCI-X settings not supported\n");
 }
 
 static void program_hpp_type2(struct pci_dev *dev, struct hpp_type2 *hpp)
@@ -1339,6 +1347,9 @@ static void program_hpp_type2(struct pci_dev *dev, struct hpp_type2 *hpp)
 	u32 reg32;
 
 	if (!hpp)
+		return;
+
+	if (!pci_is_pcie(dev))
 		return;
 
 	if (hpp->revision > 1) {
